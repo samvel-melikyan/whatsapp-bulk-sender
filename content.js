@@ -51,32 +51,38 @@ function processTextSegment(retries = 30) {
         const check = () => {
             attempts++;
             
-            let sendIcon = document.querySelector('span[data-icon="send"]');
-            let sendBtn = null;
+            // Text send button is always in the main generic footer or main area
+            let sendBtn = document.querySelector('footer button[aria-label="Send"]') || 
+                          document.querySelector('footer [data-testid="compose-btn-send"]') || 
+                          document.querySelector('footer span[data-icon="send"]');
             
-            if (sendIcon) {
-                sendBtn = sendIcon.closest('button') || sendIcon.closest('div[role="button"]') || sendIcon;
-            } else {
-                sendBtn = document.querySelector('button[aria-label="Send"]') || 
-                          document.querySelector('button[data-testid="compose-btn-send"]') ||
-                          document.querySelector('[data-testid="send"]');
-            }
-
-            if (sendBtn && !sendBtn.disabled) {
-                console.log("WhatsApp Bulk Sender: Text Send button found. Executing physical clicks...");
+            if (sendBtn) {
+                // Determine true clickable node
+                const clickTarget = sendBtn.closest('button') || sendBtn.closest('div[role="button"]') || sendBtn;
                 
-                const composer = document.querySelector('div[contenteditable="true"]');
-                if (composer) composer.focus();
-                
-                // Emulate true physical mouse sequence
-                sendBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-                sendBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-                sendBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-                
-                // Fallback
-                try { sendBtn.click(); } catch(e){}
-                
-                setTimeout(() => resolve(), 1500);
+                if (!clickTarget.disabled) {
+                    console.log("WhatsApp Bulk Sender: Force-clicking text send button...");
+                    
+                    setTimeout(() => {
+                        // Force strong Enter dispatch
+                        const composer = document.querySelector('div[contenteditable="true"]');
+                        if (composer) {
+                            composer.focus();
+                            const enterEvent = new KeyboardEvent('keydown', {
+                                bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13, charCode: 13
+                            });
+                            composer.dispatchEvent(enterEvent);
+                        }
+                        
+                        // Force DOM click
+                        clickTarget.click();
+                        
+                        setTimeout(() => resolve(), 1500);
+                    }, 500); // 500ms stabilization delay for React states
+                } else {
+                    if (attempts < retries) setTimeout(check, 1000);
+                    else resolve();
+                }
             } else {
                 const errPopup = document.querySelector('[data-testid="popup-controls"]');
                 if (errPopup && document.body.innerText.toLowerCase().includes('invalid')) {
@@ -156,23 +162,21 @@ function sendAttachment(attachData) {
             const checkPreview = () => {
                 previewAttempts++;
                 
-                const sends = Array.from(document.querySelectorAll('span[data-icon="send"]'));
-                const finalSendIcon = sends[sends.length - 1];
+                // The attachment preview modal ALWAYS exists outside or detached from the main footer.
+                // We filter out any send buttons inside 'footer' to guarantee we target the modal icon.
+                const modalBtns = Array.from(document.querySelectorAll('span[data-icon="send"]'))
+                                       .map(icon => icon.closest('div[role="button"], button') || icon)
+                                       .filter(btn => !btn.closest('footer'));
 
-                if (finalSendIcon) {
-                    console.log("WhatsApp Bulk Sender: Found preview send button. Executing clicks...");
+                if (modalBtns.length > 0) {
+                    const finalModalBtn = modalBtns[0];
+                    console.log("WhatsApp Bulk Sender: Found isolated preview send button. Firing native click...");
                     
                     setTimeout(() => {
-                        const wrapper = finalSendIcon.closest('div[role="button"], button') || finalSendIcon;
-                        
-                        wrapper.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-                        wrapper.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-                        wrapper.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-                        
-                        try { finalSendIcon.click(); } catch(e){}
+                        finalModalBtn.click();
                         
                         setTimeout(() => resolve(), 2500); 
-                    }, 1000);
+                    }, 1500); // Wait 1.5s for any thumbnail generation processing visually
                 } else {
                     if (previewAttempts < 30) {
                         setTimeout(checkPreview, 1000);
