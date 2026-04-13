@@ -1,8 +1,5 @@
 let queue = [];
-let isPaused = false;
-let isStopped = false;
-let currentIndex = 0;
-let attachmentData = null; // Stores { dataUrl, filename, type }
+let attachmentData = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     // Tab switching
@@ -50,8 +47,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Control Buttons
     document.getElementById('start-btn').addEventListener('click', startCampaign);
-    document.getElementById('pause-btn').addEventListener('click', togglePause);
-    document.getElementById('stop-btn').addEventListener('click', stopCampaign);
+    document.getElementById('pause-btn').addEventListener('click', () => {
+        chrome.runtime.sendMessage({ action: 'PAUSE_CAMPAIGN' });
+        setTimeout(pollState, 100);
+    });
+    document.getElementById('stop-btn').addEventListener('click', () => {
+        chrome.runtime.sendMessage({ action: 'STOP_CAMPAIGN' });
+        setTimeout(pollState, 100);
+    });
 
     // Attachment Input Handling
     const attachInput = document.getElementById('attachment-file');
@@ -65,14 +68,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const file = e.target.files[0];
         if (!file) return;
 
-        // ~15MB limit check to prevent extension memory crashes
         if (file.size > 15 * 1024 * 1024) {
-            log("File too large. Please use files under 15MB.", "error");
+            localLog("File too large. Please use files under 15MB.", "error");
             attachInput.value = "";
             return;
         }
 
-        log(`Reading attachment: ${file.name}...`, 'system');
+        localLog(`Reading attachment: ${file.name}...`, 'system');
         const reader = new FileReader();
         reader.onload = (event) => {
             attachmentData = {
@@ -82,7 +84,7 @@ document.addEventListener('DOMContentLoaded', () => {
             };
             attachName.innerText = file.name;
             clearAttachBtn.style.display = "inline-block";
-            log(`Attachment ready.`, 'success');
+            localLog(`Attachment ready.`, 'success');
         };
         reader.readAsDataURL(file);
     });
@@ -92,8 +94,12 @@ document.addEventListener('DOMContentLoaded', () => {
         attachInput.value = "";
         attachName.innerText = "";
         clearAttachBtn.style.display = "none";
-        log("Attachment removed.", "system");
+        localLog("Attachment removed.", "system");
     });
+
+    // Start State Polling
+    setInterval(pollState, 1000);
+    pollState(); // Fetch initially without waiting
 });
 
 function handleFile(e) {
@@ -105,10 +111,9 @@ function handleFile(e) {
         const text = event.target.result;
         try {
             queue = parseCSV(text);
-            log(`Loaded ${queue.length} contacts from CSV.`, 'success');
-            updateProgress();
+            localLog(`Loaded ${queue.length} contacts from CSV.`, 'success');
         } catch (err) {
-            log(`CSV Error: ${err.message}`, 'error');
+            localLog(`CSV Error: ${err.message}`, 'error');
         }
     };
     reader.readAsText(file);
@@ -125,11 +130,11 @@ function parseCSV(text) {
 
     return lines.slice(1).map(line => {
         const parts = line.split(',').map(p => p.trim());
-        let cleanedPhone = parts[phoneIdx].replace(/[^\d+]/g, ''); // Keep digits and +
+        let cleanedPhone = parts[phoneIdx].replace(/[^\d+]/g, ''); 
         if (cleanedPhone.startsWith('0')) {
             cleanedPhone = '374' + cleanedPhone.substring(1);
         } else if (cleanedPhone.startsWith('+')) {
-            cleanedPhone = cleanedPhone.substring(1); // WhatsApp API usually expects without +
+            cleanedPhone = cleanedPhone.substring(1); 
         }
         
         return {
@@ -140,7 +145,7 @@ function parseCSV(text) {
     }).filter(contact => contact.phone);
 }
 
-async function startCampaign() {
+function startCampaign() {
     const currentTab = document.querySelector('.tab-btn.active').dataset.tab;
     
     if (currentTab === 'manual') {
@@ -160,125 +165,61 @@ async function startCampaign() {
     }
 
     if (queue.length === 0) {
-        log("No numbers found to process.", "error");
+        localLog("No numbers found to process.", "error");
         return;
     }
 
     const template = document.getElementById('message').value;
     if (!template.trim() && !attachmentData) {
-        log("Please enter a message or select an attachment.", "error");
+        localLog("Please enter a message or select an attachment.", "error");
         return;
     }
 
-    isStopped = false;
-    isPaused = false;
-    currentIndex = 0;
-    
-    toggleUI(true);
-    log(`Campaign started. Targets: ${queue.length}`, 'system');
-    
-    processNext();
+    chrome.runtime.sendMessage({
+        action: 'START_CAMPAIGN',
+        queue: queue,
+        template: template,
+        attachmentData: attachmentData
+    }, () => {
+        localLog("Sent to background tracker...", "system");
+        setTimeout(pollState, 300); 
+    });
 }
 
-async function processNext() {
-    if (isStopped || currentIndex >= queue.length) {
-        finishCampaign();
-        return;
-    }
+function pollState() {
+    chrome.runtime.sendMessage({ action: 'GET_STATE' }, (state) => {
+        if (chrome.runtime.lastError || !state) return; 
 
-    if (isPaused) return;
+        const running = !state.isStopped;
+        toggleUI(running);
 
-    const contact = queue[currentIndex];
-    const template = document.getElementById('message').value;
-    const finalMsg = template.replace(/{name}/gi, contact.name).replace(/{phone}/gi, contact.phone);
-
-    log(`Sending to ${contact.name} (${contact.phone})...`, 'system');
-
-    try {
-        // Step 1: Open/Update WhatsApp Tab
-        // We look for an existing WhatsApp Web tab or open a new one
-        const tabs = await chrome.tabs.query({ url: "*://web.whatsapp.com/*" });
-        let waTab;
-        
-        const waUrl = `https://web.whatsapp.com/send?phone=${contact.phone}` + (finalMsg.trim() ? `&text=${encodeURIComponent(finalMsg)}` : "");
-        
-        if (tabs.length > 0) {
-            waTab = tabs[0];
-            await chrome.tabs.update(waTab.id, { url: waUrl, active: false });
-        } else {
-            waTab = await chrome.tabs.create({ url: waUrl, active: false });
+        if (state.queueLength > 0) {
+            const percent = (state.currentIndex / state.queueLength) * 100;
+            document.getElementById('progress-fill').style.width = `${percent}%`;
+            document.getElementById('progress-text').innerText = `${state.currentIndex}/${state.queueLength} Sent`;
         }
 
-        // Step 2: Wait for tab to load and message the content script
-        // We'll wait a few seconds for redirect to finish
-        await sleep(5000); 
-
-        const payload = { 
-            action: "SEND_MESSAGE",
-            attachment: attachmentData
-        };
-
-        const response = await chrome.tabs.sendMessage(waTab.id, payload);
+        renderLogs(state.logs);
         
-        if (response && response.status === "SUCCESS") {
-            log(`Success: Sent to ${contact.name}`, 'success');
-            currentIndex++;
-            updateProgress();
-            
-            if (currentIndex < queue.length) {
-                const delay = Math.floor(Math.random() * 10000) + 5000; // 5-15s delay
-                log(`Waiting ${Math.round(delay/1000)}s...`, 'wait');
-                setTimeout(processNext, delay);
-            } else {
-                processNext();
-            }
-        } else {
-            throw new Error(response?.message || "Failed to click send button.");
-        }
-
-    } catch (err) {
-        log(`Error with ${contact.name}: ${err.message}`, 'error');
-        // Optionally skip and continue
-        currentIndex++;
-        updateProgress();
-        setTimeout(processNext, 5000);
-    }
+        document.getElementById('pause-btn').innerText = state.isPaused ? "Resume" : "Pause";
+    });
 }
 
-function updateProgress() {
-    const percent = (currentIndex / queue.length) * 100;
-    document.getElementById('progress-fill').style.width = `${percent}%`;
-    document.getElementById('progress-text').innerText = `${currentIndex}/${queue.length} Sent`;
+function localLog(msg, type = 'system') {
+    chrome.runtime.sendMessage({ action: 'ADD_LOG', msg, type });
 }
 
-function log(msg, type = 'system') {
+function renderLogs(logArray) {
+    if (!logArray || logArray.length === 0) return;
+    
     const logContainer = document.getElementById('log');
-    const entry = document.createElement('div');
-    entry.className = `log-entry ${type}`;
-    entry.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
-    logContainer.prepend(entry);
-}
-
-function togglePause() {
-    isPaused = !isPaused;
-    document.getElementById('pause-btn').innerText = isPaused ? "Resume" : "Pause";
-    if (!isPaused) {
-        log("Campaign resumed.", 'system');
-        processNext();
-    } else {
-        log("Campaign paused.", 'system');
-    }
-}
-
-function stopCampaign() {
-    isStopped = true;
-    log("Campaign stopped by user.", 'error');
-    finishCampaign();
-}
-
-function finishCampaign() {
-    toggleUI(false);
-    log("All tasks completed.", 'success');
+    logContainer.innerHTML = ''; 
+    logArray.forEach(entry => {
+        const div = document.createElement('div');
+        div.className = `log-entry ${entry.type}`;
+        div.innerText = `[${entry.time}] ${entry.msg}`;
+        logContainer.appendChild(div);
+    });
 }
 
 function toggleUI(running) {
@@ -290,5 +231,3 @@ function toggleUI(running) {
     document.getElementById('attach-btn').disabled = running;
     document.getElementById('clear-attach-btn').disabled = running;
 }
-
-function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
