@@ -44,62 +44,75 @@ async function processMessaging(hasAttachment) {
     }
 }
 
-function processTextSegment(retries = 30) {
+function getSendBtn(isModal) {
+    if (isModal) {
+        let btns = Array.from(document.querySelectorAll('div[aria-label="Send"], button[aria-label="Send"], span[data-icon="send"]'))
+                        .map(el => el.closest('button') || el.closest('div[role="button"]') || el)
+                        .filter(el => !el.closest('footer'));
+        return btns[btns.length - 1]; // Return the topmost modal button
+    } else {
+        let btn = document.querySelector('footer button[aria-label="Send"]') || 
+                  document.querySelector('footer [data-testid="compose-btn-send"]') ||
+                  document.querySelector('footer div[role="button"][aria-label="Send"]');
+        if (btn) return btn;
+        
+        let span = document.querySelector('footer span[data-icon="send"]');
+        if (span) return span.closest('button') || span.closest('div[role="button"]') || span;
+        
+        return null;
+    }
+}
+
+function processTextSegment(retries = 20) { // 20 attempts * 1000ms = 20 seconds maximum blocking
     return new Promise((resolve, reject) => {
         let attempts = 0;
         
-        const check = () => {
+        const tick = () => {
             attempts++;
             
-            // Text send button is always in the main generic footer or main area
-            let sendBtn = document.querySelector('footer button[aria-label="Send"]') || 
-                          document.querySelector('footer [data-testid="compose-btn-send"]') || 
-                          document.querySelector('footer span[data-icon="send"]');
+            // 1. Check for Invalid Number Popups
+            const errPopup = document.querySelector('[data-testid="popup-controls"]');
+            if (errPopup && document.body.innerText.toLowerCase().includes('invalid')) {
+                const okButton = errPopup.querySelector('button');
+                if (okButton) okButton.click();
+                return reject(new Error("Invalid number."));
+            }
             
-            if (sendBtn) {
-                // Determine true clickable node
-                const clickTarget = sendBtn.closest('button') || sendBtn.closest('div[role="button"]') || sendBtn;
+            // 2. Fetch the text send button
+            let btn = getSendBtn(false);
+            
+            if (btn) {
+                // If it is found, it means text is currently in the composer but hasn't fully sent yet.
+                if (!btn.disabled && btn.getAttribute('aria-disabled') !== 'true') {
+                    console.log(`WhatsApp Bulk Sender: Firing text click... (Attempt ${attempts})`);
+                    try { btn.click(); } catch(e) {}
+                    try { btn.dispatchEvent(new MouseEvent('mousedown', {bubbles: true})); } catch(e) {}
+                    try { btn.dispatchEvent(new MouseEvent('mouseup', {bubbles: true})); } catch(e) {}
+                } else {
+                    console.log("WhatsApp Bulk Sender: Text Send button is buffering (aria-disabled). Waiting...");
+                }
                 
-                if (!clickTarget.disabled) {
-                    console.log("WhatsApp Bulk Sender: Force-clicking text send button...");
-                    
-                    setTimeout(() => {
-                        // Force strong Enter dispatch
-                        const composer = document.querySelector('div[contenteditable="true"]');
-                        if (composer) {
-                            composer.focus();
-                            const enterEvent = new KeyboardEvent('keydown', {
-                                bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13, charCode: 13
-                            });
-                            composer.dispatchEvent(enterEvent);
-                        }
-                        
-                        // Force DOM click
-                        clickTarget.click();
-                        
-                        setTimeout(() => resolve(), 1500);
-                    }, 500); // 500ms stabilization delay for React states
-                } else {
-                    if (attempts < retries) setTimeout(check, 1000);
-                    else resolve();
-                }
+                // Retry in 500ms to see if it vanished (meaning send was successful)
+                setTimeout(tick, 1000);
             } else {
-                const errPopup = document.querySelector('[data-testid="popup-controls"]');
-                if (errPopup && document.body.innerText.toLowerCase().includes('invalid')) {
-                    const okButton = errPopup.querySelector('button');
-                    if (okButton) okButton.click();
-                    return reject(new Error("Invalid number."));
+                // 3. Button does NOT exist!
+                const composer = document.querySelector('div[contenteditable="true"]');
+                if (composer && composer.innerText.trim() === '') {
+                    // Send button is gone BECAUSE the composer is completely empty! (Successful send)
+                    console.log("WhatsApp Bulk Sender: Text sent and cleared successfully!");
+                    return resolve();
                 }
-            
+                
+                // If the composer isn't empty, or doesn't exist, we are still loading the chat.
                 if (attempts < retries) {
-                    setTimeout(check, 1000);
+                    setTimeout(tick, 1000);
                 } else {
-                    resolve();
+                    resolve(); // Timeout fallback, move to attachment stage
                 }
             }
         };
         
-        check();
+        tick();
     });
 }
 
@@ -147,45 +160,51 @@ function sendAttachment(attachData) {
             if (!composer) return reject(new Error("Composer not found to paste attachment."));
             
             composer.focus();
-
             const dt = new DataTransfer();
             dt.items.add(file);
             
-            // Bypass React blocks by emulating a strict physical Ctrl+V Paste event
             const pasteEvent = new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt });
             composer.dispatchEvent(pasteEvent);
+            console.log("WhatsApp Bulk Sender: Dispatched paste event for attachment.");
 
-            console.log("WhatsApp Bulk Sender: Dispatched synthetic paste event for attachment.");
-
-            // Wait for WhatsApp's Image/Document Preview Modal to pop up
-            let previewAttempts = 0;
-            const checkPreview = () => {
-                previewAttempts++;
+            // Wait for Modal to open and Hammer the Modals Send Button until it closes
+            let attempts = 0;
+            const retries = 20; // Maximum 20 seconds waiting for preview modal validation
+            
+            const tickPreview = () => {
+                attempts++;
                 
-                // The attachment preview modal ALWAYS exists outside or detached from the main footer.
-                // We filter out any send buttons inside 'footer' to guarantee we target the modal icon.
-                const modalBtns = Array.from(document.querySelectorAll('span[data-icon="send"]'))
-                                       .map(icon => icon.closest('div[role="button"], button') || icon)
-                                       .filter(btn => !btn.closest('footer'));
-
-                if (modalBtns.length > 0) {
-                    const finalModalBtn = modalBtns[0];
-                    console.log("WhatsApp Bulk Sender: Found isolated preview send button. Firing native click...");
-                    
-                    setTimeout(() => {
-                        finalModalBtn.click();
-                        
-                        setTimeout(() => resolve(), 2500); 
-                    }, 1500); // Wait 1.5s for any thumbnail generation processing visually
-                } else {
-                    if (previewAttempts < 30) {
-                        setTimeout(checkPreview, 1000);
+                let modalBtn = getSendBtn(true);
+                
+                if (modalBtn) {
+                    if (!modalBtn.disabled && modalBtn.getAttribute('aria-disabled') !== 'true') {
+                        console.log(`WhatsApp Bulk Sender: Firing attachment click... (Attempt ${attempts})`);
+                        try { modalBtn.click(); } catch(e) {}
+                        try { modalBtn.dispatchEvent(new MouseEvent('mousedown', {bubbles: true})); } catch(e) {}
+                        try { modalBtn.dispatchEvent(new MouseEvent('mouseup', {bubbles: true})); } catch(e) {}
                     } else {
-                        reject(new Error("Attachment preview send button not found."));
+                        console.log("WhatsApp Bulk Sender: Attachment preview rendering (aria-disabled). Waiting...");
+                    }
+                    setTimeout(tickPreview, 1000);
+                } else {
+                    // Modal Send Button is completely gone.
+                    // Did it successfully close or was it never opened?
+                    if (attempts > 2) { 
+                        // It existed for at least some cycles, meaning we clicked it and it vanished!
+                        console.log("WhatsApp Bulk Sender: Attachment modal detected as closed. Send successful!");
+                        setTimeout(() => resolve(), 1000); // Buffer delay before next contact
+                    } else {
+                        // Modal hasn't spawned yet
+                        if (attempts < retries) {
+                            setTimeout(tickPreview, 1000);
+                        } else {
+                            reject(new Error("Attachment preview send button never spawned or timed out."));
+                        }
                     }
                 }
             };
-            setTimeout(checkPreview, 1000);
+            
+            setTimeout(tickPreview, 1500); // Initial 1.5s delay to let `paste` actually trigger the modal opening securely
         } catch (e) {
             reject(new Error("Attachment err: " + e.message));
         }
