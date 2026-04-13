@@ -63,16 +63,18 @@ function processTextSegment(retries = 30) {
             }
 
             if (sendBtn && !sendBtn.disabled) {
-                console.log("WhatsApp Bulk Sender: Text Send button found. Dispatching Enter...");
+                console.log("WhatsApp Bulk Sender: Text Send button found. Executing physical clicks...");
                 
                 const composer = document.querySelector('div[contenteditable="true"]');
-                if (composer) {
-                    composer.focus();
-                    const enterDown = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, keyCode: 13, key: 'Enter', code: 'Enter' });
-                    composer.dispatchEvent(enterDown);
-                } else {
-                    sendBtn.click();
-                }
+                if (composer) composer.focus();
+                
+                // Emulate true physical mouse sequence
+                sendBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+                sendBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+                sendBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                
+                // Fallback
+                try { sendBtn.click(); } catch(e){}
                 
                 setTimeout(() => resolve(), 1500);
             } else {
@@ -86,7 +88,6 @@ function processTextSegment(retries = 30) {
                 if (attempts < retries) {
                     setTimeout(check, 1000);
                 } else {
-                    // Resolve anyway to fallback to attachment attempt if text somehow failed to populate
                     resolve();
                 }
             }
@@ -136,35 +137,30 @@ function sendAttachment(attachData) {
         try {
             const file = base64ToFile(attachData.dataUrl, attachData.filename, attachData.type);
             
+            const composer = document.querySelector('div[contenteditable="true"]');
+            if (!composer) return reject(new Error("Composer not found to paste attachment."));
+            
+            composer.focus();
+
             const dt = new DataTransfer();
             dt.items.add(file);
+            
+            // Bypass React blocks by emulating a strict physical Ctrl+V Paste event
+            const pasteEvent = new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt });
+            composer.dispatchEvent(pasteEvent);
 
-            // Chrome's DragEvent constructor has a known bug where it strips the dataTransfer property.
-            // We forcefully inject it onto the event prototype to ensure React's Tracker captures the dropped file.
-            function createDragEvent(type) {
-                const event = new DragEvent(type, { bubbles: true, cancelable: true, clientX: 0, clientY: 0 });
-                Object.defineProperty(event, 'dataTransfer', { value: dt });
-                return event;
-            }
-
-            const dropZone = document.querySelector('#main') || document.body;
-            dropZone.dispatchEvent(createDragEvent('dragenter'));
-            dropZone.dispatchEvent(createDragEvent('dragover'));
-            dropZone.dispatchEvent(createDragEvent('drop'));
-
-            console.log("WhatsApp Bulk Sender: Dispatched hardened Drag&Drop events.");
+            console.log("WhatsApp Bulk Sender: Dispatched synthetic paste event for attachment.");
 
             // Wait for WhatsApp's Image/Document Preview Modal to pop up
             let previewAttempts = 0;
             const checkPreview = () => {
                 previewAttempts++;
                 
-                // Grab all send icons. The preview modal is layered on top, meaning its button is generated securely last in the DOM.
                 const sends = Array.from(document.querySelectorAll('span[data-icon="send"]'));
                 const finalSendIcon = sends[sends.length - 1];
 
                 if (finalSendIcon) {
-                    console.log("WhatsApp Bulk Sender: Found preview send button. Firing synthetics...");
+                    console.log("WhatsApp Bulk Sender: Found preview send button. Executing clicks...");
                     
                     setTimeout(() => {
                         const wrapper = finalSendIcon.closest('div[role="button"], button') || finalSendIcon;
@@ -173,17 +169,15 @@ function sendAttachment(attachData) {
                         wrapper.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
                         wrapper.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
                         
-                        // Fallback purely for redundancy
                         try { finalSendIcon.click(); } catch(e){}
                         
-                        // Wait for WhatsApp to physically process the animated send transition
                         setTimeout(() => resolve(), 2500); 
                     }, 1000);
                 } else {
                     if (previewAttempts < 30) {
                         setTimeout(checkPreview, 1000);
                     } else {
-                        reject(new Error("Attachment preview send button not found. Layout might have shifted."));
+                        reject(new Error("Attachment preview send button not found."));
                     }
                 }
             };
