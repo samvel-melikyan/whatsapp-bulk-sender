@@ -45,6 +45,16 @@
                 </div>
             </div>
 
+            <div class="attachment-section" style="margin-top: 15px; background: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 8px;">
+                <label for="attachment-file" style="display:block; margin-bottom: 5px;">Attachment (Optional)</label>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <button id="attach-btn" class="btn secondary" style="flex: 1;">Choose File</button>
+                    <button id="clear-attach-btn" class="btn danger" style="display: none; padding: 8px 12px; min-width: 40px;" title="Remove Attachment">✕</button>
+                    <input type="file" id="attachment-file" hidden>
+                </div>
+                <p id="attachment-name" style="font-size: 0.8rem; color: #aaa; margin-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></p>
+            </div>
+
             <div class="control-section">
                 <button id="start-btn" class="btn primary">Start Campaign</button>
                 <div class="btn-group">

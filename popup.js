@@ -2,6 +2,7 @@ let queue = [];
 let isPaused = false;
 let isStopped = false;
 let currentIndex = 0;
+let attachmentData = null; // Stores { dataUrl, filename, type }
 
 document.addEventListener('DOMContentLoaded', () => {
     // Tab switching
@@ -51,6 +52,48 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('start-btn').addEventListener('click', startCampaign);
     document.getElementById('pause-btn').addEventListener('click', togglePause);
     document.getElementById('stop-btn').addEventListener('click', stopCampaign);
+
+    // Attachment Input Handling
+    const attachInput = document.getElementById('attachment-file');
+    const attachBtn = document.getElementById('attach-btn');
+    const clearAttachBtn = document.getElementById('clear-attach-btn');
+    const attachName = document.getElementById('attachment-name');
+
+    attachBtn.addEventListener('click', () => attachInput.click());
+
+    attachInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        // ~15MB limit check to prevent extension memory crashes
+        if (file.size > 15 * 1024 * 1024) {
+            log("File too large. Please use files under 15MB.", "error");
+            attachInput.value = "";
+            return;
+        }
+
+        log(`Reading attachment: ${file.name}...`, 'system');
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            attachmentData = {
+                dataUrl: event.target.result,
+                filename: file.name,
+                type: file.type
+            };
+            attachName.innerText = file.name;
+            clearAttachBtn.style.display = "inline-block";
+            log(`Attachment ready.`, 'success');
+        };
+        reader.readAsDataURL(file);
+    });
+
+    clearAttachBtn.addEventListener('click', () => {
+        attachmentData = null;
+        attachInput.value = "";
+        attachName.innerText = "";
+        clearAttachBtn.style.display = "none";
+        log("Attachment removed.", "system");
+    });
 });
 
 function handleFile(e) {
@@ -122,8 +165,8 @@ async function startCampaign() {
     }
 
     const template = document.getElementById('message').value;
-    if (!template) {
-        log("Please enter a message.", "error");
+    if (!template.trim() && !attachmentData) {
+        log("Please enter a message or select an attachment.", "error");
         return;
     }
 
@@ -157,7 +200,7 @@ async function processNext() {
         const tabs = await chrome.tabs.query({ url: "*://web.whatsapp.com/*" });
         let waTab;
         
-        const waUrl = `https://web.whatsapp.com/send?phone=${contact.phone}&text=${encodeURIComponent(finalMsg)}`;
+        const waUrl = `https://web.whatsapp.com/send?phone=${contact.phone}` + (finalMsg.trim() ? `&text=${encodeURIComponent(finalMsg)}` : "");
         
         if (tabs.length > 0) {
             waTab = tabs[0];
@@ -170,7 +213,12 @@ async function processNext() {
         // We'll wait a few seconds for redirect to finish
         await sleep(5000); 
 
-        const response = await chrome.tabs.sendMessage(waTab.id, { action: "SEND_MESSAGE" });
+        const payload = { 
+            action: "SEND_MESSAGE",
+            attachment: attachmentData
+        };
+
+        const response = await chrome.tabs.sendMessage(waTab.id, payload);
         
         if (response && response.status === "SUCCESS") {
             log(`Success: Sent to ${contact.name}`, 'success');
@@ -239,6 +287,8 @@ function toggleUI(running) {
     document.getElementById('stop-btn').disabled = !running;
     document.getElementById('numbers').disabled = running;
     document.getElementById('message').disabled = running;
+    document.getElementById('attach-btn').disabled = running;
+    document.getElementById('clear-attach-btn').disabled = running;
 }
 
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
