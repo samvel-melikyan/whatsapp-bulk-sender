@@ -126,63 +126,61 @@ function base64ToFile(base64, filename, mimeType) {
     return new File([u8arr], filename, {type: mimeType});
 }
 
-function sendAttachment(attachment) {
+function sendAttachment(attachData) {
     return new Promise((resolve, reject) => {
         try {
-            const file = base64ToFile(attachment.dataUrl, attachment.filename, attachment.type);
+            const file = base64ToFile(attachData.dataUrl, attachData.filename, attachData.type);
             
-            // 1. Click attach button natively to trigger the React DOM tree creation
-            const attachMenuBtn = document.querySelector('span[data-icon="plus"]') || document.querySelector('span[data-icon="clip"]');
-            if (!attachMenuBtn) return reject(new Error("Attach button not found."));
-            
-            const btnWrap = attachMenuBtn.closest('button') || attachMenuBtn.closest('div[role="button"]') || attachMenuBtn;
-            btnWrap.click();
-            console.log("WhatsApp Bulk Sender: Opened attach menu.");
+            const dt = new DataTransfer();
+            dt.items.add(file);
 
-            let fileAttempts = 0;
-            const checkFile = () => {
-                fileAttempts++;
-                // 2. Find file input
-                const inputs = Array.from(document.querySelectorAll('input[type="file"]'));
-                const targetInput = inputs.find(i => i.accept && i.accept.includes('*')) || inputs[0];
+            // Chrome's DragEvent constructor has a known bug where it strips the dataTransfer property.
+            // We forcefully inject it onto the event prototype to ensure React's Tracker captures the dropped file.
+            function createDragEvent(type) {
+                const event = new DragEvent(type, { bubbles: true, cancelable: true, clientX: 0, clientY: 0 });
+                Object.defineProperty(event, 'dataTransfer', { value: dt });
+                return event;
+            }
 
-                if (targetInput) {
-                    console.log("WhatsApp Bulk Sender: Injecting file into input...");
-                    const dt = new DataTransfer();
-                    dt.items.add(file);
-                    targetInput.files = dt.files;
-                    targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+            const dropZone = document.querySelector('#main') || document.body;
+            dropZone.dispatchEvent(createDragEvent('dragenter'));
+            dropZone.dispatchEvent(createDragEvent('dragover'));
+            dropZone.dispatchEvent(createDragEvent('drop'));
 
-                    // 3. Wait for preview modal send button
-                    let previewAttempts = 0;
-                    const checkPreview = () => {
-                        previewAttempts++;
-                        let sendIcon = document.querySelector('div[aria-label="Send"] span[data-icon="send"]') ||
-                                       document.querySelector('div[data-animate-modal-body="true"] span[data-icon="send"]');
-                        if (!sendIcon) {
-                            const all = Array.from(document.querySelectorAll('span[data-icon="send"]'));
-                            if (all.length > 0) sendIcon = all[all.length - 1]; 
-                        }
+            console.log("WhatsApp Bulk Sender: Dispatched hardened Drag&Drop events.");
 
-                        let finalSend = sendIcon ? (sendIcon.closest('button') || sendIcon.closest('div[role="button"]')) : document.querySelector('span[data-icon="send-light"]');
+            // Wait for WhatsApp's Image/Document Preview Modal to pop up
+            let previewAttempts = 0;
+            const checkPreview = () => {
+                previewAttempts++;
+                
+                // Grab all send icons. The preview modal is layered on top, meaning its button is generated securely last in the DOM.
+                const sends = Array.from(document.querySelectorAll('span[data-icon="send"]'));
+                const finalSendIcon = sends[sends.length - 1];
+
+                if (finalSendIcon) {
+                    console.log("WhatsApp Bulk Sender: Found preview send button. Firing clicks...");
+                    
+                    setTimeout(() => {
+                        try { finalSendIcon.click(); } catch(e){}
                         
-                        if (finalSend) {
-                            setTimeout(() => {
-                                finalSend.click();
-                                setTimeout(() => resolve(), 2000);
-                            }, 1000);
-                        } else {
-                            if (previewAttempts < 30) setTimeout(checkPreview, 1000);
-                            else reject(new Error("Preview send button not found."));
+                        const wrapper = finalSendIcon.closest('div[role="button"], button');
+                        if (wrapper) {
+                            try { wrapper.click(); } catch(e) {}
                         }
-                    };
-                    setTimeout(checkPreview, 1000);
+                        
+                        // Wait for WhatsApp to physically process the animated send transition
+                        setTimeout(() => resolve(), 2500); 
+                    }, 1000);
                 } else {
-                    if (fileAttempts < 20) setTimeout(checkFile, 500);
-                    else reject(new Error("File input not found."));
+                    if (previewAttempts < 30) {
+                        setTimeout(checkPreview, 1000);
+                    } else {
+                        reject(new Error("Attachment preview send button not found. Layout might have shifted."));
+                    }
                 }
             };
-            setTimeout(checkFile, 500);
+            setTimeout(checkPreview, 1000);
         } catch (e) {
             reject(new Error("Attachment err: " + e.message));
         }
