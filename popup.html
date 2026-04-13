@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Bulk Sender Pro</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Bulk Sender <span>Pro</span></h1>
+            <p class="subtitle">Automated Messaging for WhatsApp Web</p>
+        </header>
+
+        <main>
+            <div class="input-section">
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="manual">Direct List</button>
+                    <button class="tab-btn" data-tab="csv">CSV Upload</button>
+                </div>
+
+                <div id="manual-tab" class="tab-content active">
+                    <label for="numbers">Enter Numbers (one per line)</label>
+                    <textarea id="numbers" placeholder="e.g.,&#10;+1234567890&#10;+0987654321"></textarea>
+                </div>
+
+                <div id="csv-tab" class="tab-content">
+                    <label for="csv-file">Upload CSV File</label>
+                    <div class="file-drop-zone" id="drop-zone">
+                        <input type="file" id="csv-file" accept=".csv" hidden>
+                        <p>Drag & drop or <span class="highlight">browse</span></p>
+                        <p class="tiny">CSV must have 'phone' and can have 'name' columns</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="message-section">
+                <label for="message">Message Template</label>
+                <textarea id="message" placeholder="Hello {name}, how are you?"></textarea>
+                <div class="placeholders">
+                    <span>Placeholders:</span>
+                    <button class="ph-btn" data-ph="{name}">{name}</button>
+                    <button class="ph-btn" data-ph="{phone}">{phone}</button>
+                </div>
+            </div>
+
+            <div class="control-section">
+                <button id="start-btn" class="btn primary">Start Campaign</button>
+                <div class="btn-group">
+                    <button id="pause-btn" class="btn secondary" disabled>Pause</button>
+                    <button id="stop-btn" class="btn danger" disabled>Stop</button>
+                </div>
+            </div>
+
+            <div class="status-section">
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div id="progress-fill"></div>
+                    </div>
+                    <span id="progress-text">0/0 Sent</span>
+                </div>
+                <div id="log" class="log-container">
+                    <div class="log-entry system">Ready to start.</div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Safety Delay: <span id="delay-val">5-15s</span></p>
+            <div class="caution">⚠️ Use responsibly to avoid account bans.</div>
+        </footer>
+    </div>
+    <script src="popup.js"></script>
+</body>
+</html>
