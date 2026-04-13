@@ -63,12 +63,17 @@ function processTextSegment(retries = 30) {
             }
 
             if (sendBtn && !sendBtn.disabled) {
-                console.log("WhatsApp Bulk Sender: Text Send button found. Clicking...");
+                console.log("WhatsApp Bulk Sender: Text Send button found. Dispatching Enter...");
                 
                 const composer = document.querySelector('div[contenteditable="true"]');
-                if (composer) composer.focus();
+                if (composer) {
+                    composer.focus();
+                    const enterDown = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, keyCode: 13, key: 'Enter', code: 'Enter' });
+                    composer.dispatchEvent(enterDown);
+                } else {
+                    sendBtn.click();
+                }
                 
-                sendBtn.click();
                 setTimeout(() => resolve(), 1500);
             } else {
                 const errPopup = document.querySelector('[data-testid="popup-controls"]');
@@ -159,15 +164,17 @@ function sendAttachment(attachData) {
                 const finalSendIcon = sends[sends.length - 1];
 
                 if (finalSendIcon) {
-                    console.log("WhatsApp Bulk Sender: Found preview send button. Firing clicks...");
+                    console.log("WhatsApp Bulk Sender: Found preview send button. Firing synthetics...");
                     
                     setTimeout(() => {
-                        try { finalSendIcon.click(); } catch(e){}
+                        const wrapper = finalSendIcon.closest('div[role="button"], button') || finalSendIcon;
                         
-                        const wrapper = finalSendIcon.closest('div[role="button"], button');
-                        if (wrapper) {
-                            try { wrapper.click(); } catch(e) {}
-                        }
+                        wrapper.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+                        wrapper.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+                        wrapper.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                        
+                        // Fallback purely for redundancy
+                        try { finalSendIcon.click(); } catch(e){}
                         
                         // Wait for WhatsApp to physically process the animated send transition
                         setTimeout(() => resolve(), 2500); 

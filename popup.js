@@ -143,6 +143,8 @@ function parseCSV(text) {
             cleanedPhone = '374' + cleanedPhone.substring(1);
         } else if (cleanedPhone.startsWith('+')) {
             cleanedPhone = cleanedPhone.substring(1); 
+        } else if (cleanedPhone.length === 8 && !cleanedPhone.startsWith('374')) {
+            cleanedPhone = '374' + cleanedPhone;
         }
         
         return {
@@ -164,6 +166,8 @@ function startCampaign() {
                 cleanedPhone = '374' + cleanedPhone.substring(1);
             } else if (cleanedPhone.startsWith('+')) {
                 cleanedPhone = cleanedPhone.substring(1);
+            } else if (cleanedPhone.length === 8 && !cleanedPhone.startsWith('374')) {
+                cleanedPhone = '374' + cleanedPhone;
             }
             return { 
                 phone: cleanedPhone, 
