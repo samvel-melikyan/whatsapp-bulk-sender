@@ -1,5 +1,5 @@
 let queue = [];
-let attachmentData = null;
+let hasAttachmentFlag = false;
 
 document.addEventListener('DOMContentLoaded', () => {
     // Tab switching
@@ -55,6 +55,9 @@ document.addEventListener('DOMContentLoaded', () => {
         chrome.runtime.sendMessage({ action: 'STOP_CAMPAIGN' });
         setTimeout(pollState, 100);
     });
+    document.getElementById('reset-btn').addEventListener('click', () => {
+        chrome.runtime.sendMessage({ action: 'RESET_STATE' }, () => pollState());
+    });
 
     // Attachment Input Handling
     const attachInput = document.getElementById('attachment-file');
@@ -77,24 +80,29 @@ document.addEventListener('DOMContentLoaded', () => {
         localLog(`Reading attachment: ${file.name}...`, 'system');
         const reader = new FileReader();
         reader.onload = (event) => {
-            attachmentData = {
+            const data = {
                 dataUrl: event.target.result,
                 filename: file.name,
                 type: file.type
             };
-            attachName.innerText = file.name;
-            clearAttachBtn.style.display = "inline-block";
-            localLog(`Attachment ready.`, 'success');
+            chrome.storage.local.set({ attachmentData: data }, () => {
+                hasAttachmentFlag = true;
+                attachName.innerText = file.name;
+                clearAttachBtn.style.display = "inline-block";
+                localLog(`Attachment ready.`, 'success');
+            });
         };
         reader.readAsDataURL(file);
     });
 
     clearAttachBtn.addEventListener('click', () => {
-        attachmentData = null;
-        attachInput.value = "";
-        attachName.innerText = "";
-        clearAttachBtn.style.display = "none";
-        localLog("Attachment removed.", "system");
+        chrome.storage.local.remove('attachmentData', () => {
+            hasAttachmentFlag = false;
+            attachInput.value = "";
+            attachName.innerText = "";
+            clearAttachBtn.style.display = "none";
+            localLog("Attachment removed.", "system");
+        });
     });
 
     // Start State Polling
@@ -170,7 +178,7 @@ function startCampaign() {
     }
 
     const template = document.getElementById('message').value;
-    if (!template.trim() && !attachmentData) {
+    if (!template.trim() && !hasAttachmentFlag) {
         localLog("Please enter a message or select an attachment.", "error");
         return;
     }
@@ -179,7 +187,7 @@ function startCampaign() {
         action: 'START_CAMPAIGN',
         queue: queue,
         template: template,
-        attachmentData: attachmentData
+        hasAttachment: hasAttachmentFlag
     }, () => {
         localLog("Sent to background tracker...", "system");
         setTimeout(pollState, 300); 
@@ -190,18 +198,15 @@ function pollState() {
     chrome.runtime.sendMessage({ action: 'GET_STATE' }, (state) => {
         if (chrome.runtime.lastError || !state) return; 
 
-        const running = !state.isStopped;
-        toggleUI(running);
+        toggleUI(state);
 
         if (state.queueLength > 0) {
             const percent = (state.currentIndex / state.queueLength) * 100;
             document.getElementById('progress-fill').style.width = `${percent}%`;
-            document.getElementById('progress-text').innerText = `${state.currentIndex}/${state.queueLength} Sent`;
+            document.getElementById('progress-text').innerText = `${state.currentIndex} / ${state.queueLength} Sent`;
         }
 
         renderLogs(state.logs);
-        
-        document.getElementById('pause-btn').innerText = state.isPaused ? "Resume" : "Pause";
     });
 }
 
@@ -222,12 +227,26 @@ function renderLogs(logArray) {
     });
 }
 
-function toggleUI(running) {
-    document.getElementById('start-btn').disabled = running;
-    document.getElementById('pause-btn').disabled = !running;
-    document.getElementById('stop-btn').disabled = !running;
-    document.getElementById('numbers').disabled = running;
-    document.getElementById('message').disabled = running;
-    document.getElementById('attach-btn').disabled = running;
-    document.getElementById('clear-attach-btn').disabled = running;
+function toggleUI(state) {
+    const setupView = document.getElementById('setup-view');
+    const progressView = document.getElementById('progress-view');
+    const reportView = document.getElementById('report-view');
+    
+    if (!state || state.queueLength === 0) {
+        setupView.style.display = 'block';
+        progressView.style.display = 'none';
+        reportView.style.display = 'none';
+    } else if (state.queueLength > 0 && !state.isStopped) {
+        setupView.style.display = 'none';
+        progressView.style.display = 'block';
+        reportView.style.display = 'none';
+        
+        document.getElementById('pause-btn').innerText = state.isPaused ? "Resume" : "Pause";
+    } else if (state.queueLength > 0 && state.isStopped) {
+        setupView.style.display = 'none';
+        progressView.style.display = 'none';
+        reportView.style.display = 'block';
+        
+        document.getElementById('report-sent').innerText = state.currentIndex;
+    }
 }

@@ -9,7 +9,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "SEND_MESSAGE") {
         console.log("WhatsApp Bulk Sender: Attempting to send message...");
         
-        processMessaging(request.attachment)
+        processMessaging(request.hasAttachment)
             .then(() => {
                 try { sendResponse({ status: "SUCCESS" }); } catch(e) {}
             })
@@ -22,21 +22,25 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 });
 
-async function processMessaging(attachment) {
+async function processMessaging(hasAttachment) {
     const urlParams = new URLSearchParams(window.location.search);
     const hasText = urlParams.has('text') && urlParams.get('text').trim() !== "";
 
     if (hasText) {
         await processTextSegment();
         // Brief pause between text and attachment to ensure React propagation
-        if (attachment) await new Promise(r => setTimeout(r, 1000));
+        if (hasAttachment) await new Promise(r => setTimeout(r, 1000));
     } else {
         await verifyChatLoaded();
     }
 
-    if (attachment && attachment.dataUrl) {
-        console.log("WhatsApp Bulk Sender: Processing attachment...");
-        await sendAttachment(attachment);
+    if (hasAttachment) {
+        console.log("WhatsApp Bulk Sender: Fetching attachment payload from local storage...");
+        let attachData = await new Promise(r => chrome.storage.local.get('attachmentData', res => r(res.attachmentData)));
+        if (attachData && attachData.dataUrl) {
+            console.log("WhatsApp Bulk Sender: Processing attachment injection...");
+            await sendAttachment(attachData);
+        }
     }
 }
 

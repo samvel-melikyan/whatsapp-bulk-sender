@@ -14,7 +14,9 @@
         </header>
 
         <main>
-            <div class="input-section">
+            <!-- Setup View -->
+            <div id="setup-view">
+                <div class="input-section">
                 <div class="tabs">
                     <button class="tab-btn active" data-tab="manual">Direct List</button>
                     <button class="tab-btn" data-tab="csv">CSV Upload</button>
@@ -55,24 +57,43 @@
                 <p id="attachment-name" style="font-size: 0.8rem; color: #aaa; margin-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></p>
             </div>
 
-            <div class="control-section">
-                <button id="start-btn" class="btn primary">Start Campaign</button>
-                <div class="btn-group">
-                    <button id="pause-btn" class="btn secondary" disabled>Pause</button>
-                    <button id="stop-btn" class="btn danger" disabled>Stop</button>
+                <div class="control-section">
+                    <button id="start-btn" class="btn primary">Start Campaign</button>
                 </div>
             </div>
 
-            <div class="status-section">
-                <div class="progress-container">
-                    <div class="progress-bar">
-                        <div id="progress-fill"></div>
+            <!-- Progress View -->
+            <div id="progress-view" style="display: none;">
+                <h3 style="margin-bottom: 15px; color: var(--text-light); text-align: center;">Campaign in Progress</h3>
+                
+                <div class="status-section">
+                    <div class="progress-container">
+                        <div class="progress-bar">
+                            <div id="progress-fill"></div>
+                        </div>
+                        <span id="progress-text">0/0 Sent</span>
                     </div>
-                    <span id="progress-text">0/0 Sent</span>
+                    <div id="log" class="log-container" style="height: 180px; margin-bottom: 15px;">
+                        <div class="log-entry system">Initializing...</div>
+                    </div>
                 </div>
-                <div id="log" class="log-container">
-                    <div class="log-entry system">Ready to start.</div>
+
+                <div class="control-section">
+                    <div class="btn-group" style="width: 100%;">
+                        <button id="pause-btn" class="btn secondary" style="flex: 1;">Pause</button>
+                        <button id="stop-btn" class="btn danger" style="flex: 1;">Stop</button>
+                    </div>
                 </div>
+            </div>
+
+            <!-- Report View -->
+            <div id="report-view" style="display: none; text-align: center; padding: 20px 0;">
+                <h2 style="color: var(--primary); margin-bottom: 10px;">Campaign Finished!</h2>
+                <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; margin: 15px 0;">
+                    <h1 id="report-sent" style="font-size: 3.5rem; margin: 0; color: #25D366;">0</h1>
+                    <p style="color: var(--text-muted); font-size: 0.9rem;">Total Messages Processed</p>
+                </div>
+                <button id="reset-btn" class="btn primary" style="width: 100%;">Start New Campaign</button>
             </div>
         </main>
 

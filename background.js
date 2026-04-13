@@ -4,7 +4,7 @@ let isPaused = false;
 let isStopped = true;
 let logs = [];
 let template = "";
-let attachmentData = null;
+let hasAttachmentFlag = false;
 
 function log(msg, type = 'system') {
     const entry = { time: new Date().toLocaleTimeString(), msg, type };
@@ -18,7 +18,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (request.action === 'START_CAMPAIGN') {
             queue = request.queue;
             template = request.template;
-            attachmentData = request.attachmentData;
+            hasAttachmentFlag = request.hasAttachment;
             currentIndex = 0;
             isPaused = false;
             isStopped = false;
@@ -34,6 +34,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         } else if (request.action === 'STOP_CAMPAIGN') {
             isStopped = true;
             log("Campaign stopped by user.", 'error');
+            sendResponse({status: "ok"});
+        } else if (request.action === 'RESET_STATE') {
+            queue = [];
+            currentIndex = 0;
+            isStopped = true;
+            isPaused = false;
+            logs = [];
             sendResponse({status: "ok"});
         } else if (request.action === 'ADD_LOG') {
             log(request.msg, request.type);
@@ -73,25 +80,22 @@ async function processNext() {
     log(`Sending to ${contact.name} (${contact.phone})...`, 'system');
 
     try {
-        const currentTabs = await chrome.tabs.query({ active: true, currentWindow: true });
-        const currentTabId = currentTabs.length > 0 ? currentTabs[0].id : null;
-
         const allWaTabs = await chrome.tabs.query({ url: "*://web.whatsapp.com/*" });
-        let waTab = allWaTabs.find(t => t.id !== currentTabId);
+        let waTab = allWaTabs.length > 0 ? allWaTabs[0] : null;
         
         const waUrl = `https://web.whatsapp.com/send?phone=${contact.phone}` + (finalMsg.trim() ? `&text=${encodeURIComponent(finalMsg)}` : "");
         
         if (waTab) {
-            await chrome.tabs.update(waTab.id, { url: waUrl, active: false });
+            await chrome.tabs.update(waTab.id, { url: waUrl, active: true });
         } else {
-            waTab = await chrome.tabs.create({ url: waUrl, active: false });
+            waTab = await chrome.tabs.create({ url: waUrl, active: true });
         }
 
         await sleep(5000); 
 
         const payload = { 
             action: "SEND_MESSAGE",
-            attachment: attachmentData
+            hasAttachment: hasAttachmentFlag
         };
 
         const response = await chrome.tabs.sendMessage(waTab.id, payload);
