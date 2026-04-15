@@ -18,7 +18,8 @@
     "tabs",
     "scripting",
     "storage",
-    "unlimitedStorage"
+    "unlimitedStorage",
+    "debugger"
   ],
   "host_permissions": [
     "https://web.whatsapp.com/*"

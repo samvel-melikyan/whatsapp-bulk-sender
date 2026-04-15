@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const fileInput = document.getElementById('csv-file');
     const dropZone = document.getElementById('drop-zone');
     dropZone.addEventListener('click', () => fileInput.click());
-    
+
     fileInput.addEventListener('change', handleFile);
     dropZone.addEventListener('dragover', (e) => {
         e.preventDefault();
@@ -130,7 +130,7 @@ function handleFile(e) {
 function parseCSV(text) {
     const lines = text.split(/\r?\n/).filter(line => line.trim());
     const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-    
+
     const phoneIdx = headers.findIndex(h => h.includes('phone') || h.includes('number'));
     const nameIdx = headers.findIndex(h => h.includes('name'));
 
@@ -138,15 +138,15 @@ function parseCSV(text) {
 
     return lines.slice(1).map(line => {
         const parts = line.split(',').map(p => p.trim());
-        let cleanedPhone = parts[phoneIdx].replace(/[^\d+]/g, ''); 
+        let cleanedPhone = parts[phoneIdx].replace(/[^\d+]/g, '');
         if (cleanedPhone.startsWith('0')) {
             cleanedPhone = '374' + cleanedPhone.substring(1);
         } else if (cleanedPhone.startsWith('+')) {
-            cleanedPhone = cleanedPhone.substring(1); 
+            cleanedPhone = cleanedPhone.substring(1);
         } else if (cleanedPhone.length === 8 && !cleanedPhone.startsWith('374')) {
             cleanedPhone = '374' + cleanedPhone;
         }
-        
+
         return {
             phone: cleanedPhone,
             name: nameIdx !== -1 ? parts[nameIdx] : parts[phoneIdx],
@@ -157,7 +157,7 @@ function parseCSV(text) {
 
 function startCampaign() {
     const currentTab = document.querySelector('.tab-btn.active').dataset.tab;
-    
+
     if (currentTab === 'manual') {
         const rawNumbers = document.getElementById('numbers').value.split(/\n/).filter(n => n.trim());
         queue = rawNumbers.map(n => {
@@ -169,9 +169,9 @@ function startCampaign() {
             } else if (cleanedPhone.length === 8 && !cleanedPhone.startsWith('374')) {
                 cleanedPhone = '374' + cleanedPhone;
             }
-            return { 
-                phone: cleanedPhone, 
-                name: 'Contact' 
+            return {
+                phone: cleanedPhone,
+                name: 'Contact'
             };
         });
     }
@@ -194,13 +194,13 @@ function startCampaign() {
         hasAttachment: hasAttachmentFlag
     }, () => {
         localLog("Sent to background tracker...", "system");
-        setTimeout(pollState, 300); 
+        setTimeout(pollState, 300);
     });
 }
 
 function pollState() {
     chrome.runtime.sendMessage({ action: 'GET_STATE' }, (state) => {
-        if (chrome.runtime.lastError || !state) return; 
+        if (chrome.runtime.lastError || !state) return;
 
         toggleUI(state);
 
@@ -220,9 +220,9 @@ function localLog(msg, type = 'system') {
 
 function renderLogs(logArray) {
     if (!logArray || logArray.length === 0) return;
-    
+
     const logContainer = document.getElementById('log');
-    logContainer.innerHTML = ''; 
+    logContainer.innerHTML = '';
     logArray.forEach(entry => {
         const div = document.createElement('div');
         div.className = `log-entry ${entry.type}`;
@@ -235,7 +235,7 @@ function toggleUI(state) {
     const setupView = document.getElementById('setup-view');
     const progressView = document.getElementById('progress-view');
     const reportView = document.getElementById('report-view');
-    
+
     if (!state || state.queueLength === 0) {
         setupView.style.display = 'block';
         progressView.style.display = 'none';
@@ -244,13 +244,13 @@ function toggleUI(state) {
         setupView.style.display = 'none';
         progressView.style.display = 'block';
         reportView.style.display = 'none';
-        
+
         document.getElementById('pause-btn').innerText = state.isPaused ? "Resume" : "Pause";
     } else if (state.queueLength > 0 && state.isStopped) {
         setupView.style.display = 'none';
         progressView.style.display = 'none';
         reportView.style.display = 'block';
-        
+
         document.getElementById('report-sent').innerText = state.currentIndex;
     }
 }
