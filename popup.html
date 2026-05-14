@@ -23,8 +23,11 @@
                 </div>
 
                 <div id="manual-tab" class="tab-content active">
-                    <label for="numbers">Enter Numbers (one per line)</label>
-                    <textarea id="numbers" placeholder="e.g.,&#10;+1234567890&#10;+0987654321"></textarea>
+                    <label for="numbers" style="display:flex;justify-content:space-between;">
+                        <span>Enter Numbers (one per line)</span>
+                        <span id="num-count" style="color:#25D366;font-size:0.8rem;">0 / 200</span>
+                    </label>
+                    <textarea id="numbers" placeholder="e.g.,&#10;+1234567890&#10;+0987654321" rows="8"></textarea>
                 </div>
 
                 <div id="csv-tab" class="tab-content">
@@ -87,18 +90,71 @@
             </div>
 
             <!-- Report View -->
-            <div id="report-view" style="display: none; text-align: center; padding: 20px 0;">
-                <h2 style="color: var(--primary); margin-bottom: 10px;">Campaign Finished!</h2>
-                <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; margin: 15px 0;">
-                    <h1 id="report-sent" style="font-size: 3.5rem; margin: 0; color: #25D366;">0</h1>
-                    <p style="color: var(--text-muted); font-size: 0.9rem;">Total Messages Processed</p>
+            <div id="report-view" style="display: none; padding: 15px 0;">
+                <h2 style="color: var(--primary); margin-bottom: 12px; text-align: center;">📊 Campaign Report</h2>
+
+                <!-- Stat Cards Row -->
+                <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+                    <div class="report-stat-card" style="flex:1; background: rgba(37,211,102,0.12); border: 1px solid rgba(37,211,102,0.3); border-radius: 10px; padding: 12px 8px; text-align: center;">
+                        <div id="report-sent-count" style="font-size: 2rem; font-weight: 700; color: #25D366;">0</div>
+                        <div style="font-size: 0.7rem; color: #8adfaa; text-transform: uppercase; letter-spacing: 0.5px;">Sent ✅</div>
+                    </div>
+                    <div class="report-stat-card" style="flex:1; background: rgba(255,77,77,0.12); border: 1px solid rgba(255,77,77,0.3); border-radius: 10px; padding: 12px 8px; text-align: center;">
+                        <div id="report-failed-count" style="font-size: 2rem; font-weight: 700; color: #ff4d4d;">0</div>
+                        <div style="font-size: 0.7rem; color: #ff9999; text-transform: uppercase; letter-spacing: 0.5px;">Failed ❌</div>
+                    </div>
+                    <div class="report-stat-card" style="flex:1; background: rgba(255,170,0,0.12); border: 1px solid rgba(255,170,0,0.3); border-radius: 10px; padding: 12px 8px; text-align: center;">
+                        <div id="report-invalid-count" style="font-size: 2rem; font-weight: 700; color: #ffaa00;">0</div>
+                        <div style="font-size: 0.7rem; color: #ffd27f; text-transform: uppercase; letter-spacing: 0.5px;">Invalid 🚫</div>
+                    </div>
                 </div>
-                <button id="reset-btn" class="btn primary" style="width: 100%;">Start New Campaign</button>
+
+                <!-- Total processed -->
+                <div style="text-align: center; margin-bottom: 14px; color: var(--text-muted); font-size: 0.85rem;">
+                    Total processed: <strong id="report-total" style="color: var(--text-light);">0</strong> / <span id="report-queue-total">0</span>
+                </div>
+
+                <!-- Expandable Lists -->
+                <div id="report-lists" style="max-height: 240px; overflow-y: auto; margin-bottom: 14px;">
+
+                    <!-- Invalid Numbers List -->
+                    <div id="report-invalid-section" style="display: none; margin-bottom: 10px;">
+                        <div class="report-list-header" data-toggle="report-invalid-list" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: rgba(255,170,0,0.1); border-radius: 8px; border: 1px solid rgba(255,170,0,0.2);">
+                            <span style="color: #ffaa00; font-size: 0.8rem; font-weight: 600;">🚫 Not Registered in WhatsApp</span>
+                            <span style="color: #ffd27f; font-size: 0.75rem;">▼</span>
+                        </div>
+                        <div id="report-invalid-list" class="report-number-list" style="display: none; padding: 6px 0;"></div>
+                    </div>
+
+                    <!-- Failed Numbers List -->
+                    <div id="report-failed-section" style="display: none; margin-bottom: 10px;">
+                        <div class="report-list-header" data-toggle="report-failed-list" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: rgba(255,77,77,0.1); border-radius: 8px; border: 1px solid rgba(255,77,77,0.2);">
+                            <span style="color: #ff4d4d; font-size: 0.8rem; font-weight: 600;">❌ Failed to Send</span>
+                            <span style="color: #ff9999; font-size: 0.75rem;">▼</span>
+                        </div>
+                        <div id="report-failed-list" class="report-number-list" style="display: none; padding: 6px 0;"></div>
+                    </div>
+
+                    <!-- Sent Numbers List -->
+                    <div id="report-sent-section" style="display: none; margin-bottom: 10px;">
+                        <div class="report-list-header" data-toggle="report-sent-list" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: rgba(37,211,102,0.1); border-radius: 8px; border: 1px solid rgba(37,211,102,0.2);">
+                            <span style="color: #25D366; font-size: 0.8rem; font-weight: 600;">✅ Successfully Sent</span>
+                            <span style="color: #8adfaa; font-size: 0.75rem;">▼</span>
+                        </div>
+                        <div id="report-sent-list" class="report-number-list" style="display: none; padding: 6px 0;"></div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div style="display: flex; gap: 8px;">
+                    <button id="export-btn" class="btn secondary" style="flex: 1;">📥 Export CSV</button>
+                    <button id="reset-btn" class="btn primary" style="flex: 1;">🔄 New Campaign</button>
+                </div>
             </div>
         </main>
 
         <footer>
-            <p>Safety Delay: <span id="delay-val">5-15s</span></p>
+            <p>Safety Delay: <span id="delay-val">8-20s</span> &nbsp;|&nbsp; Max: <span style="color:#25D366;">200</span> numbers</p>
             <div class="caution">⚠️ Use responsibly to avoid account bans.</div>
         </footer>
     </div>

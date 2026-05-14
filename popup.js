@@ -1,5 +1,6 @@
 let queue = [];
 let hasAttachmentFlag = false;
+const MAX_NUMBERS = 200;
 
 document.addEventListener('DOMContentLoaded', () => {
     // Tab switching
@@ -24,6 +25,20 @@ document.addEventListener('DOMContentLoaded', () => {
             msgArea.focus();
         });
     });
+
+    // Live number counter for manual tab
+    const numbersArea = document.getElementById('numbers');
+    const numCount = document.getElementById('num-count');
+    const updateCounter = () => {
+        const count = numbersArea.value.split(/\n/).filter(n => n.trim()).length;
+        numCount.textContent = `${Math.min(count, MAX_NUMBERS)} / ${MAX_NUMBERS}`;
+        numCount.style.color = count > MAX_NUMBERS ? '#ff4d4d' : '#25D366';
+        if (count > MAX_NUMBERS) {
+            numCount.textContent = `${count} / ${MAX_NUMBERS} ⚠️ Limit: ${MAX_NUMBERS}`;
+        }
+    };
+    numbersArea.addEventListener('input', updateCounter);
+    numbersArea.addEventListener('paste', () => setTimeout(updateCounter, 10));
 
     // CSV Handling
     const fileInput = document.getElementById('csv-file');
@@ -132,13 +147,14 @@ function parseCSV(text) {
     const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
 
     const phoneIdx = headers.findIndex(h => h.includes('phone') || h.includes('number'));
-    const nameIdx = headers.findIndex(h => h.includes('name'));
+    const nameIdx  = headers.findIndex(h => h.includes('name'));
+    const priceIdx = headers.findIndex(h => h.includes('price') || h.includes('amount'));
 
     if (phoneIdx === -1) throw new Error("Could not find 'phone' or 'number' column in CSV.");
 
-    return lines.slice(1).map(line => {
+    const contacts = lines.slice(1).map(line => {
         const parts = line.split(',').map(p => p.trim());
-        let cleanedPhone = parts[phoneIdx].replace(/[^\d+]/g, '');
+        let cleanedPhone = (parts[phoneIdx] || '').replace(/[^\d+]/g, '');
         if (cleanedPhone.startsWith('0')) {
             cleanedPhone = '374' + cleanedPhone.substring(1);
         } else if (cleanedPhone.startsWith('+')) {
@@ -149,19 +165,34 @@ function parseCSV(text) {
 
         return {
             phone: cleanedPhone,
-            name: nameIdx !== -1 ? parts[nameIdx] : parts[phoneIdx],
+            name:  nameIdx  !== -1 ? parts[nameIdx]  : parts[phoneIdx],
+            price: priceIdx !== -1 ? parts[priceIdx] : '',
             rawData: parts
         };
-    }).filter(contact => contact.phone);
+    }).filter(c => c.phone);
+
+    if (contacts.length > MAX_NUMBERS) {
+        localLog(`⚠️ CSV has ${contacts.length} rows. Only first ${MAX_NUMBERS} will be sent.`, 'error');
+        return contacts.slice(0, MAX_NUMBERS);
+    }
+    return contacts;
 }
 
 function startCampaign() {
     const currentTab = document.querySelector('.tab-btn.active').dataset.tab;
 
     if (currentTab === 'manual') {
-        const rawNumbers = document.getElementById('numbers').value.split(/\n/).filter(n => n.trim());
-        queue = rawNumbers.map(n => {
-            let cleanedPhone = n.trim().replace(/[^\d+]/g, '');
+        const rawNumbers = document.getElementById('numbers').value
+            .split(/\n/)
+            .map(n => n.trim())
+            .filter(n => n);
+
+        if (rawNumbers.length > MAX_NUMBERS) {
+            localLog(`⚠️ ${rawNumbers.length} numbers entered. Only first ${MAX_NUMBERS} will be sent.`, 'error');
+        }
+
+        queue = rawNumbers.slice(0, MAX_NUMBERS).map(n => {
+            let cleanedPhone = n.replace(/[^\d+]/g, '');
             if (cleanedPhone.startsWith('0')) {
                 cleanedPhone = '374' + cleanedPhone.substring(1);
             } else if (cleanedPhone.startsWith('+')) {
@@ -169,10 +200,7 @@ function startCampaign() {
             } else if (cleanedPhone.length === 8 && !cleanedPhone.startsWith('374')) {
                 cleanedPhone = '374' + cleanedPhone;
             }
-            return {
-                phone: cleanedPhone,
-                name: 'Contact'
-            };
+            return { phone: cleanedPhone, name: 'Contact', price: '' };
         });
     }
 
