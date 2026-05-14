@@ -123,6 +123,32 @@ document.addEventListener('DOMContentLoaded', () => {
     // Start State Polling
     setInterval(pollState, 1000);
     pollState(); // Fetch initially without waiting
+
+    // Report Expandable Lists Toggle
+    document.addEventListener('click', (e) => {
+        const header = e.target.closest('.report-list-header');
+        if (header) {
+            const listId = header.dataset.toggle;
+            const list = document.getElementById(listId);
+            const arrow = header.querySelector('span:last-child');
+            if (list.style.display === 'none') {
+                list.style.display = 'block';
+                arrow.innerText = '▲';
+            } else {
+                list.style.display = 'none';
+                arrow.innerText = '▼';
+            }
+        }
+    });
+
+    // Export Button
+    document.getElementById('export-btn').addEventListener('click', () => {
+        chrome.runtime.sendMessage({ action: 'GET_STATE' }, (state) => {
+            if (state && state.results) {
+                exportResultsToCSV(state.results);
+            }
+        });
+    });
 });
 
 function handleFile(e) {
@@ -279,6 +305,58 @@ function toggleUI(state) {
         progressView.style.display = 'none';
         reportView.style.display = 'block';
 
-        document.getElementById('report-sent').innerText = state.currentIndex;
+        renderReport(state);
     }
+}
+
+function renderReport(state) {
+    const r = state.results || { sent: [], failed: [], invalid: [] };
+    
+    document.getElementById('report-sent-count').innerText = r.sent.length;
+    document.getElementById('report-failed-count').innerText = r.failed.length;
+    document.getElementById('report-invalid-count').innerText = r.invalid.length;
+    document.getElementById('report-total').innerText = r.sent.length + r.failed.length + r.invalid.length;
+    document.getElementById('report-queue-total').innerText = state.queueLength;
+
+    // Helper to populate lists
+    const populateList = (listId, sectionId, data, color) => {
+        const list = document.getElementById(listId);
+        const section = document.getElementById(sectionId);
+        if (data.length > 0) {
+            section.style.display = 'block';
+            list.innerHTML = data.map(item => `
+                <div style="font-size: 0.75rem; padding: 4px 10px; border-bottom: 1px solid rgba(255,255,255,0.05); color: ${color};">
+                    ${item.phone} - ${item.name} ${item.reason ? `(${item.reason})` : ''}
+                </div>
+            `).join('');
+        } else {
+            section.style.display = 'none';
+        }
+    };
+
+    populateList('report-sent-list', 'report-sent-section', r.sent, '#25D366');
+    populateList('report-failed-list', 'report-failed-section', r.failed, '#ff4d4d');
+    populateList('report-invalid-list', 'report-invalid-section', r.invalid, '#ffaa00');
+}
+
+function exportResultsToCSV(results) {
+    let csvContent = "data:text/csv;charset=utf-8,Phone,Name,Status,Reason\n";
+    
+    results.sent.forEach(r => {
+        csvContent += `${r.phone},"${r.name.replace(/"/g, '""')}",Sent,\n`;
+    });
+    results.failed.forEach(r => {
+        csvContent += `${r.phone},"${r.name.replace(/"/g, '""')}",Failed,"${(r.reason || '').replace(/"/g, '""')}"\n`;
+    });
+    results.invalid.forEach(r => {
+        csvContent += `${r.phone},"${r.name.replace(/"/g, '""')}",Invalid,\n`;
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `campaign_report_${new Date().getTime()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }

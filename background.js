@@ -191,7 +191,10 @@ async function processNext() {
 
     } catch(err) {
         const reason = err.message || "Unknown error";
-        const isInvalid = reason.toLowerCase().includes('invalid');
+        const normalizedReason = reason.toLowerCase();
+        const isInvalid = normalizedReason.includes('invalid') || 
+                          normalizedReason.includes('not registered') || 
+                          normalizedReason.includes('not on whatsapp');
 
         if (isInvalid) {
             log(`🚫 Invalid WA number: ${contact.phone}`, 'error');
