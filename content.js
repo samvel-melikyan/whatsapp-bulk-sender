@@ -14,11 +14,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         console.log("WhatsApp Bulk Sender: Received SEND_MESSAGE");
         processMessaging(request.hasAttachment)
             .then(() => {
-                try { sendResponse({ status: "SUCCESS" }); } catch(e) {}
+                try { sendResponse({ status: "SUCCESS" }); } catch (e) { }
             })
             .catch((err) => {
                 console.error("WhatsApp Bulk Sender Error:", err);
-                try { sendResponse({ status: "ERROR", message: err.message }); } catch(e) {}
+                try { sendResponse({ status: "ERROR", message: err.message }); } catch (e) { }
             });
         return true;
     }
@@ -42,14 +42,13 @@ function getComposer() {
 // ─── Utility: find send button ───────────────────────────────────────────────
 function getSendBtn(isModal) {
     const selectors = [
-        'button[aria-label="Send"]',
-        'div[role="button"][aria-label="Send"]',
-        '[data-testid="compose-btn-send"]',
-        '[data-testid="send"]',
-        'span[data-icon="send"]',
-        'span[data-icon="send-light"]'
+        '[class="html-button xdj266r x14z9mp xat24cr x1lziwak xexx8yu xyri2b x18d9i69 x1c1uobl x178xt8z x1lun4ml xso031l xpilrb4 x1n2onr6 x1ejq31n x18oe1m7 x1sy0etr xstzfhl x1so62im x1ja2u2z x1ypdohk x1s928wv x1j6awrg x4eaejv x1wsn0xg x1r0yslu x2q1x1w xapdjt xr6f91l x5rv0tg x1akc3lz xikp0eg x1xl5mkn x1mfml39 x1l5mzlr xgmdoj8 x1f1wgk5 x1x3ic1u xfn3atn x1pse0pq x1yxkqql xtnn1bt x9v5kkp xmw7ebm xrdum7p x3oybdh x6nhntm x2lah0s x1lliihq xk8lq53 x9f619 xt8t1vi x1xc408v x129tdwq x15urzxu x1vqgdyp x100vrsf"]',
+        '[data-tab="11"]',
+        '[aria-label="Send"]',
+
+
     ];
-    
+
     let candidates = [];
     selectors.forEach(sel => {
         document.querySelectorAll(sel).forEach(el => {
@@ -76,9 +75,9 @@ function simulateEnterKey(target) {
         key: 'Enter', code: 'Enter', keyCode: 13, which: 13,
         bubbles: true, cancelable: true, composed: true
     };
-    target.dispatchEvent(new KeyboardEvent('keydown',  { ...opts }));
+    target.dispatchEvent(new KeyboardEvent('keydown', { ...opts }));
     target.dispatchEvent(new KeyboardEvent('keypress', { ...opts }));
-    target.dispatchEvent(new KeyboardEvent('keyup',    { ...opts }));
+    target.dispatchEvent(new KeyboardEvent('keyup', { ...opts }));
 }
 
 // ─── Strategy: Mutate React state + simulate Input ────────────────────────────
@@ -94,7 +93,7 @@ function triggerReactInputChange(el, value) {
         document.execCommand('insertText', false, value);
         el.dispatchEvent(new Event('input', { bubbles: true }));
         return true;
-    } catch(e) {
+    } catch (e) {
         console.warn("React fiber mutation failed:", e);
         return false;
     }
@@ -105,37 +104,36 @@ function simulateRealClick(el) {
     try {
         if (!el) return;
         el.focus();
-        
+
         const rect = el.getBoundingClientRect();
         const x = rect.left + rect.width / 2;
         const y = rect.top + rect.height / 2;
         const base = { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, buttons: 1, view: window };
 
-        el.dispatchEvent(new PointerEvent('pointerover',  { ...base, pointerId: 1, pointerType: 'mouse' }));
-        el.dispatchEvent(new MouseEvent('mouseover',      base));
-        el.dispatchEvent(new PointerEvent('pointerdown',  { ...base, pointerId: 1, pointerType: 'mouse' }));
-        el.dispatchEvent(new MouseEvent('mousedown',      base));
-        el.dispatchEvent(new PointerEvent('pointerup',    { ...base, pointerId: 1, pointerType: 'mouse' }));
-        el.dispatchEvent(new MouseEvent('mouseup',        base));
-        el.dispatchEvent(new MouseEvent('click',          base));
-        
+        el.dispatchEvent(new PointerEvent('pointerover', { ...base, pointerId: 1, pointerType: 'mouse' }));
+        el.dispatchEvent(new MouseEvent('mouseover', base));
+        el.dispatchEvent(new PointerEvent('pointerdown', { ...base, pointerId: 1, pointerType: 'mouse' }));
+        el.dispatchEvent(new MouseEvent('mousedown', base));
+        el.dispatchEvent(new PointerEvent('pointerup', { ...base, pointerId: 1, pointerType: 'mouse' }));
+        el.dispatchEvent(new MouseEvent('mouseup', base));
+        el.dispatchEvent(new MouseEvent('click', base));
+
         setTimeout(() => {
             if (document.body.contains(el)) el.click();
         }, 50);
-    } catch(e) {
+    } catch (e) {
         console.warn("simulateRealClick failed:", e);
     }
 }
 
 // ─── Error popup detection (Invalid Numbers) ──────────────────────────────────
 function checkErrorPopup() {
-    const popup = document.querySelector('[data-testid="popup-controls"]') || 
-                  document.querySelector('div[role="dialog"]') ||
-                  document.querySelector('.x1n2onr6'); // common WA modal class
-    
+    const popup = document.querySelector('[data-testid="popup-controls"]') ||
+        document.querySelector('div[role="dialog"]') ||
+        document.querySelector('.x1n2onr6');
+
     if (popup) {
         const text = popup.innerText.toLowerCase();
-        // Detect "invalid", "not registered", "invalid number", etc.
         if (text.includes('invalid') || text.includes('not on whatsapp') || text.includes('not registered')) {
             const buttons = Array.from(popup.querySelectorAll('button, [role="button"]'));
             const okBtn = buttons.find(b => b.innerText.toLowerCase().includes('ok') || b.innerText.toLowerCase().includes('close'));
@@ -172,12 +170,11 @@ async function processMessaging(hasAttachment) {
 function processTextSegment(maxAttempts = 40) {
     return new Promise((resolve, reject) => {
         let attempts = 0;
-        let stage = 'waiting'; // waiting -> enter_sent -> click_sent -> done
+        let stage = 'waiting';
 
         const tick = async () => {
             attempts++;
 
-            // 1. Check for Invalid Number Popups
             if (checkErrorPopup()) {
                 console.log("WhatsApp Bulk Sender: Detected invalid number popup.");
                 return reject(new Error("Invalid number."));
@@ -186,29 +183,24 @@ function processTextSegment(maxAttempts = 40) {
             const composer = getComposer();
 
             if (!composer) {
-                // If composer not found but chat panel is there, maybe it's still loading
                 if (attempts < maxAttempts) return setTimeout(tick, 1000);
-                return resolve(); 
+                return resolve();
             }
 
             const text = (composer.innerText || composer.textContent || '').trim();
 
-            // 2. SUCCESS check: composer cleared
             if (stage !== 'waiting' && text === '') {
                 console.log("WhatsApp Bulk Sender: Message sent!");
                 return resolve();
             }
 
-            // 3. WAITING: Try strategies
             if (text !== '') {
                 composer.focus();
-                
+
                 if (stage === 'waiting') {
-                    // Sync React state
                     triggerReactInputChange(composer, text);
                     await sleep(500);
-                    
-                    // Simulate Enter
+
                     simulateEnterKey(composer);
                     stage = 'enter_sent';
                     return setTimeout(tick, 2000);
@@ -229,7 +221,6 @@ function processTextSegment(maxAttempts = 40) {
                     return setTimeout(tick, 2500);
                 }
 
-                // Retries
                 if (attempts % 4 === 0) {
                     const btn = getSendBtn(false);
                     if (btn) simulateRealClick(btn);
@@ -266,64 +257,45 @@ function base64ToFile(base64, filename, mimeType) {
     const bstr = atob(arr[1]);
     let n = bstr.length;
     const u8arr = new Uint8Array(n);
-    while (n--) u8arr[n] = bstr.charCodeAt(n);
-    return new File([u8arr], filename, { type: mimeType });
+
+    while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+    }
+
+    try {
+        return new File([u8arr], filename, { type: mimeType });
+    } catch (e) {
+        return new Blob([u8arr], { type: mimeType });
+    }
 }
 
-// ─── Attachment sending ───────────────────────────────────────────────────────
-function sendAttachment(attachData) {
-    return new Promise((resolve, reject) => {
-        try {
-            const file = base64ToFile(attachData.dataUrl, attachData.filename, attachData.type);
-            const composer = getComposer();
-            if (!composer) return reject(new Error("Composer not found."));
+// ─── SEND ATTACHMENT ─────────────────────────────────────────────────────────
+async function sendAttachment(attachData) {
+    console.log("WhatsApp Bulk Sender: Sending attachment...");
 
-            composer.focus();
-            const dt = new DataTransfer();
-            dt.items.add(file);
-            composer.dispatchEvent(new ClipboardEvent('paste', {
-                bubbles: true, cancelable: true, clipboardData: dt
-            }));
+    const attachBtn = document.querySelector('[data-testid="clip"]');
+    if (!attachBtn) throw new Error("Attachment button not found.");
 
-            let attempts = 0;
-            const maxAttempts = 30;
-            let modalSeen = false;
-            let enterSent = false;
-            let clickSent = false;
+    attachBtn.click();
+    await sleep(500);
 
-            const tick = () => {
-                attempts++;
-                const btn = getSendBtn(true);
+    const fileInput = document.querySelector('input[type="file"]');
+    if (!fileInput) throw new Error("Attachment file input not found.");
 
-                if (btn) {
-                    modalSeen = true;
-                    if (!btn.disabled && btn.getAttribute('aria-disabled') !== 'true') {
-                        if (!enterSent) {
-                            const focused = document.activeElement || document.body;
-                            simulateEnterKey(focused);
-                            const cap = document.querySelector('div[contenteditable="true"][data-lexical-editor]') || document.querySelector('div[contenteditable="true"]:not([data-tab])');
-                            if (cap) simulateEnterKey(cap);
-                            enterSent = true;
-                            return setTimeout(tick, 2000);
-                        }
-                        if (!clickSent) {
-                            simulateRealClick(btn);
-                            clickSent = true;
-                            return setTimeout(tick, 2000);
-                        }
-                        if (attempts % 3 === 0) simulateRealClick(btn);
-                    }
-                    if (attempts < maxAttempts) return setTimeout(tick, 1000);
-                    reject(new Error("Modal send button timeout."));
-                } else {
-                    if (modalSeen) return setTimeout(resolve, 1000);
-                    if (attempts < maxAttempts) return setTimeout(tick, 1000);
-                    reject(new Error("Attachment modal timeout."));
-                }
-            };
-            setTimeout(tick, 2500);
-        } catch(e) {
-            reject(new Error("Attachment error: " + e.message));
-        }
-    });
+    const file = base64ToFile(attachData.dataUrl, attachData.filename, attachData.mimeType);
+
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    fileInput.files = dt.files;
+
+    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(1000);
+
+    const sendBtn = getSendBtn(true);
+    if (!sendBtn) throw new Error("Could not find modal send button.");
+
+    simulateRealClick(sendBtn);
+
+    await sleep(1500);
+    console.log("WhatsApp Bulk Sender: Attachment sent.");
 }
